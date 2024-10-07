@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	outputFilePath := `.\output\rss_summary.html`
+	outputFilePath := `./output/rss_summary.html`
 	fileStore := store.New(outputFilePath)
 
 	svc := service.New(fileStore)
