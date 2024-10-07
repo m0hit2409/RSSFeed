@@ -24,10 +24,15 @@ func New(svc *service.Service, filePath string) *Handler {
 }
 
 func (h *Handler) PathHandler(w http.ResponseWriter, r *http.Request) {
-
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Recovered from panic in HTTP handler: %v", r)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}()
 	if r.Method != http.MethodPost {
+		slog.Error(fmt.Sprintf("Invalid request method:%v  in HTTP handler: %v", r.Method, r.URL))
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		slog.Error(fmt.Sprintf("Invalid request method:%v for '%v'", r.Method, r.URL))
 		return
 	}
 
@@ -55,6 +60,7 @@ func (h *Handler) PathHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.svc.WgRequest.Add(1)
 	go h.svc.RequestProcessor(requestBody)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -64,6 +70,12 @@ func (h *Handler) PathHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) FeedHandler(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Recovered from panic in HTTP handler: %v", r)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}()
 	file, err := os.ReadFile(h.filePath)
 	if err != nil {
 		http.Error(w, "Some error occurred", http.StatusInternalServerError)

@@ -17,6 +17,8 @@ type Service struct {
 	paths        chan models.Path
 	rssItemsChan chan string
 	retryLimit   int
+	WgRequest    *sync.WaitGroup // this is to handle the number of requests running before shutting down
+	wgFileWrite  *sync.WaitGroup // this is to handle the number of requests running before shutting down
 }
 
 func New(fs *store.FileStore) *Service {
@@ -26,6 +28,8 @@ func New(fs *store.FileStore) *Service {
 		rssItemsChan: make(chan string, 100),
 		file:         fs,
 		retryLimit:   3,
+		WgRequest:    &sync.WaitGroup{},
+		wgFileWrite:  &sync.WaitGroup{},
 	}
 
 	workersURL := 3
@@ -34,17 +38,19 @@ func New(fs *store.FileStore) *Service {
 		go svc.RSSPathProcessor()
 	}
 
+	svc.wgFileWrite.Add(1)
 	go svc.writeToHTMLFile()
 
 	return svc
 }
 
 func (svc *Service) RequestProcessor(reqBody models.RequestBody) {
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go svc.addPathsToChan(reqBody.FilePaths, models.TypeFile, wg)
-	go svc.addPathsToChan(reqBody.Urls, models.TypeUrl, wg)
-	wg.Wait()
+	defer svc.WgRequest.Done()
+	wgAddPath := &sync.WaitGroup{}
+	wgAddPath.Add(2)
+	go svc.addPathsToChan(reqBody.FilePaths, models.TypeFile, wgAddPath)
+	go svc.addPathsToChan(reqBody.Urls, models.TypeUrl, wgAddPath)
+	wgAddPath.Wait()
 }
 
 func (svc *Service) RSSPathProcessor() {
@@ -77,10 +83,11 @@ func (svc *Service) processRSSData(rssData *models.RSS) {
 }
 
 func (svc *Service) writeToHTMLFile() {
+	defer svc.wgFileWrite.Done()
 	for rssItems := range svc.rssItemsChan {
 		err := svc.file.WriteToFile(rssItems)
 		if err != nil {
-			slog.Info("file write succssful")
+			slog.Info("file write successful")
 		}
 	}
 }
@@ -134,4 +141,11 @@ func rssParseUtil(r io.Reader) (*models.RSS, error) {
 		return nil, err
 	}
 	return &rss, nil
+}
+
+func (svc *Service) Close() {
+	svc.WgRequest.Wait()
+	close(svc.paths)
+	close(svc.rssItemsChan)
+	svc.wgFileWrite.Wait()
 }
