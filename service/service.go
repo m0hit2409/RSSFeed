@@ -3,12 +3,8 @@ package service
 import (
 	"RSSFeed/models"
 	"RSSFeed/store"
-	"encoding/xml"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"os"
 	"sync"
 )
 
@@ -33,9 +29,9 @@ func New(fs *store.FileStore) *Service {
 	}
 
 	workersURL := 3
-	//intiialisng 3 workers to process urls consurrently
+	//intiialisng 3 workers to process urls concurrently
 	for i := 0; i < workersURL; i++ {
-		go svc.RSSPathProcessor()
+		go svc.pathProcessor()
 	}
 
 	svc.wgFileWrite.Add(1)
@@ -44,7 +40,8 @@ func New(fs *store.FileStore) *Service {
 	return svc
 }
 
-func (svc *Service) RequestProcessor(reqBody models.RequestBody) {
+func (svc *Service) AddPathsToChan(reqBody models.RequestBody) {
+	defer panicRecover("AddPathsToChan")
 	defer svc.WgRequest.Done()
 	wgAddPath := &sync.WaitGroup{}
 	wgAddPath.Add(2)
@@ -53,15 +50,17 @@ func (svc *Service) RequestProcessor(reqBody models.RequestBody) {
 	wgAddPath.Wait()
 }
 
-func (svc *Service) RSSPathProcessor() {
+func (svc *Service) pathProcessor() {
+	defer panicRecover("RSSPathProcessor")
+
 	for path := range svc.paths {
 		var rssData *models.RSS
 		var err error
 
 		if path.PathType == models.TypeFile {
-			rssData, err = runWithRetry(svc.retryLimit, path.Path, ExtractRSSDataFromFile)
+			rssData, err = runWithRetry(svc.retryLimit, path.Path, extractRSSDataFromFile)
 		} else {
-			rssData, err = runWithRetry(svc.retryLimit, path.Path, FetchRSSDataFromURL)
+			rssData, err = runWithRetry(svc.retryLimit, path.Path, fetchRSSDataFromURL)
 		}
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to fetch RSS Data from %v, Err:%v after retry. Dropping this path", path.Path, err))
@@ -83,64 +82,24 @@ func (svc *Service) processRSSData(rssData *models.RSS) {
 }
 
 func (svc *Service) writeToHTMLFile() {
+	defer panicRecover("writeToHTMLFile")
+
 	defer svc.wgFileWrite.Done()
 	for rssItems := range svc.rssItemsChan {
 		err := svc.file.WriteToFile(rssItems)
 		if err != nil {
-			slog.Info("file write successful")
+			slog.Info("file write unsuccessful")
 		}
 	}
 }
 
 func (svc *Service) parseItemAndAddToWrite(item models.Item, wg *sync.WaitGroup) {
-	// adding recovery for waitgroup
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error(fmt.Sprintf("Panic in 'parseItemAndAddToWrite'. Error:%v\n", r))
-		}
-	}()
+	defer panicRecover("parseItemAndAddToWrite")
 
 	defer wg.Done()
 	title, pubDate := item.Title, item.PubDate
 	outputString := fmt.Sprintf("%v\t: %v", pubDate, title)
 	svc.rssItemsChan <- outputString
-}
-
-func ExtractRSSDataFromFile(path string) (*models.RSS, error) {
-	rssFile, err := os.Open(path)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error opening file %v:. Err:%v", path, err))
-		return nil, err
-	}
-	defer rssFile.Close()
-	return rssParseUtil(rssFile)
-}
-
-func FetchRSSDataFromURL(url string) (*models.RSS, error) {
-	response, err := http.Get(url)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error fetching dat from %v:. Err:%v", url, err))
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	return rssParseUtil(response.Body)
-}
-
-func rssParseUtil(r io.Reader) (*models.RSS, error) {
-	byteValue, err := io.ReadAll(r)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error reading byte. Err:%v", err))
-		return nil, err
-	}
-
-	var rss models.RSS
-	err = xml.Unmarshal(byteValue, &rss)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Error unmarshalling XML. Err:%v", err))
-		return nil, err
-	}
-	return &rss, nil
 }
 
 func (svc *Service) Close() {

@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	outputFilePath := `C:\Users\Mohit\Desktop\RSSFeed\rssFeed.html`
+	outputFilePath := `C:\Users\Mohit\Desktop\RSSFeed\rss_summary.html`
 	fileStore := store.New(outputFilePath)
 
 	svc := service.New(fileStore)
@@ -23,8 +23,8 @@ func main() {
 	h := handlers.New(svc, outputFilePath)
 
 	sm := mux.NewRouter()
-	sm.HandleFunc("/rssPath", h.PathHandler)
-	sm.HandleFunc("/rssFeeds", h.FeedHandler)
+	sm.HandleFunc("/rss-path", h.PathHandler)
+	sm.HandleFunc("/rss-feeds", h.FeedHandler)
 
 	port := "8000"
 	server := http.Server{
@@ -32,8 +32,9 @@ func main() {
 		Addr:    ":" + port,
 	}
 	go func() {
+		slog.Info("Starting server on", "port", port)
 		if err := server.ListenAndServe(); err != nil {
-			slog.Error("erro running server", err)
+			slog.Error("error running server", "Err", err)
 		}
 	}()
 
@@ -46,7 +47,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		slog.Error("Server unable to shutdown gracefully: %v", err)
+		slog.Error("Server unable to shutdown gracefully: %v", "Err", err)
 	}
 
 	svc.Close()

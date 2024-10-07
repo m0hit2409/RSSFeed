@@ -25,8 +25,8 @@ func New(svc *service.Service, filePath string) *Handler {
 
 func (h *Handler) PathHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("Recovered from panic in HTTP handler: %v", r)
+		if panicErr := recover(); panicErr != nil {
+			slog.Error("Recovered from panic in handler", "request", r, "err", panicErr)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	}()
@@ -61,18 +61,18 @@ func (h *Handler) PathHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.svc.WgRequest.Add(1)
-	go h.svc.RequestProcessor(requestBody)
+	go h.svc.AddPathsToChan(requestBody)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	w.Write(jsonResponse)
-	slog.Info(fmt.Sprintf("Request successful '%v|%v'", r.Method, r.URL))
+	slog.Info("Request successful", "request", r.URL, "method", r.Method)
 }
 
 func (h *Handler) FeedHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("Recovered from panic in HTTP handler: %v", r)
+		if panicErr := recover(); panicErr != nil {
+			slog.Error("Recovered from panic in handler", "request", r, "err", panicErr)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	}()
@@ -92,5 +92,5 @@ func (h *Handler) FeedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog.Info(fmt.Sprintf("Request successful '%v|%v'", r.Method, r.URL))
+	slog.Info("Request successful", "request", r.URL, "method", r.Method)
 }
