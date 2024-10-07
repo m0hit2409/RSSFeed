@@ -2,39 +2,25 @@ package store
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"strings"
 )
+
+const endHTMLContent = `</ul>
+</body>
+</html>`
+
+const replaceHTMLContent = `</ul>`
 
 type FileStore struct {
 	path string
 }
 
 func New(path string) *FileStore {
-	createFileIfNotExist(path)
 	return &FileStore{
 		path: path,
-	}
-}
-
-func createFileIfNotExist(path string) {
-	_, err := os.Stat(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("Some error occurred while reading content file. Err:%v", err)
-	}
-	if err != nil && errors.Is(err, os.ErrNotExist) {
-		file, errFile := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY|os.O_RDWR, 0644)
-		if errFile != nil {
-			log.Fatalf("Some error occurred while creating content file. Err:%v", err)
-		}
-		errWrite := appendFile(file, newTemplateContent)
-		if errWrite != nil {
-			log.Fatalf("Some error occurred while writing content file. Err:%v", err)
-		}
 	}
 }
 
